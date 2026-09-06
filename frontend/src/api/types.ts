@@ -1,5 +1,14 @@
-export type Category = 'work' | 'study' | 'home' | 'holiday' | 'other';
 export type ColorPref = 'author' | 'category';
+export type RemindMode = 'morning' | 'dayBefore' | 'weekBefore';
+
+/** A family-owned, editable label with a colour. */
+export interface Category {
+  id: string;
+  name: string;
+  color: string;
+  sortOrder: number;
+  archived: boolean;
+}
 
 export interface Person {
   id: string;
@@ -36,7 +45,7 @@ export interface CalendarEvent {
   occurrenceStart: string;
   seriesStart: string;
   allDay: boolean;
-  category: Category;
+  category: Category | null;
   color: string | null;
   rrule: string | null;
   reminderMinutes: number | null;
@@ -53,8 +62,37 @@ export interface EventDraft {
   startsAt: string;
   endsAt: string;
   allDay: boolean;
-  category: Category;
+  categoryId: string | null;
   participantIds: string[];
   rrule: string | null;
   reminderMinutes: number | null;
+}
+
+/** Something to do by a deadline, with no time of day. */
+export interface Task {
+  id: string;
+  familyId: string;
+  title: string;
+  notes: string | null;
+  /** UTC midnight of the due day, or null for "someday". */
+  dueDate: string | null;
+  category: Category | null;
+  assignee: Person | null;
+  done: boolean;
+  completedAt: string | null;
+  completedBy: Person | null;
+  remindMode: RemindMode | null;
+  createdBy: Person;
+  updatedAt: string;
+  /** Past its deadline and still open. */
+  overdue: boolean;
+}
+
+export interface TaskDraft {
+  title: string;
+  notes?: string | null;
+  dueDate: string | null;
+  categoryId: string | null;
+  assigneeId: string | null;
+  remindMode: RemindMode | null;
 }

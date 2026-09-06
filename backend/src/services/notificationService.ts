@@ -53,6 +53,25 @@ export async function notifyEventCreated(eventId: string): Promise<void> {
   await Promise.all(users.map((u) => sendMessage(u.telegramId, text)));
 }
 
+/** Nudge about a task whose deadline is near, to whoever it concerns. */
+export async function notifyTaskDue(taskId: string): Promise<void> {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { family: true, category: true },
+  });
+  if (!task?.dueDate) return;
+
+  const when = formatWhen(task.dueDate, true, task.family.timezone);
+  const label = task.category ? `\n${escapeHtml(task.category.name)}` : '';
+  const text = `📝 Не забыть: <b>${escapeHtml(task.title)}</b>\nСрок: ${when}${label}`;
+
+  // An assigned task goes to that person; an unassigned one to the whole family.
+  const users = await recipients(task.familyId);
+  const targeted = task.assigneeId ? users.filter((u) => u.id === task.assigneeId) : users;
+
+  await Promise.all(targeted.map((u) => sendMessage(u.telegramId, text)));
+}
+
 export async function notifyReminder(
   eventId: string,
   occurrenceStart: Date,

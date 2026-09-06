@@ -12,5 +12,8 @@ export default defineConfig({
     globalSetup: ['./tests/globalSetup.ts'],
     hookTimeout: 60_000,
     testTimeout: 20_000,
+    // Every suite seeds the same SQLite file, so files must not overlap or they
+    // wipe each other's fixtures mid-run.
+    fileParallelism: false,
   },
 });

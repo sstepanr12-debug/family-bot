@@ -1,10 +1,7 @@
 import { useState } from 'react';
 import type { CalendarEvent, Category, EventDraft, Member } from '../../api/types';
-import { CATEGORY_LABELS } from '../../lib/colors';
 import { fromLocalInput, toLocalInput } from '../../lib/dates';
 import { Sheet } from '../../ui/Sheet';
-
-const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
 
 const REPEATS = [
   { value: '', label: 'Не повторять' },
@@ -25,6 +22,7 @@ interface Props {
   /** Existing occurrence to edit, or null when creating. */
   event: CalendarEvent | null;
   defaultDay: Date;
+  categories: Category[];
   members: Member[];
   saving: boolean;
   error: string | null;
@@ -41,7 +39,7 @@ function initialState(event: CalendarEvent | null, defaultDay: Date) {
       start: toLocalInput(new Date(event.startsAt)),
       end: toLocalInput(new Date(event.endsAt)),
       allDay: event.allDay,
-      category: event.category,
+      categoryId: event.category?.id ?? '',
       participantIds: event.participants.map((p) => p.id),
       rrule: event.rrule ?? '',
       reminder: event.reminderMinutes === null ? '' : String(event.reminderMinutes),
@@ -58,7 +56,7 @@ function initialState(event: CalendarEvent | null, defaultDay: Date) {
     start: toLocalInput(start),
     end: toLocalInput(end),
     allDay: false,
-    category: 'other' as Category,
+    categoryId: '',
     participantIds: [] as string[],
     rrule: '',
     reminder: '',
@@ -68,6 +66,7 @@ function initialState(event: CalendarEvent | null, defaultDay: Date) {
 export function EventSheet({
   event,
   defaultDay,
+  categories,
   members,
   saving,
   error,
@@ -102,7 +101,7 @@ export function EventSheet({
       startsAt: start.toISOString(),
       endsAt: end.toISOString(),
       allDay: form.allDay,
-      category: form.category,
+      categoryId: form.categoryId || null,
       participantIds: form.participantIds,
       rrule: form.rrule || null,
       reminderMinutes: form.reminder === '' ? null : Number(form.reminder),
@@ -178,41 +177,49 @@ export function EventSheet({
         )}
       </div>
 
-      <div className="field field__row">
-        <div>
-          <label className="field__label" htmlFor="ev-category">
-            Категория
-          </label>
-          <select
-            id="ev-category"
-            className="select"
-            value={form.category}
-            onChange={(e) => patch('category', e.target.value as Category)}
+      <div className="field">
+        <span className="field__label">Категория</span>
+        <div className="chip-row">
+          <button
+            type="button"
+            className={'chip' + (form.categoryId === '' ? ' chip--active' : '')}
+            onClick={() => patch('categoryId', '')}
           >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_LABELS[c]}
-              </option>
-            ))}
-          </select>
+            Без категории
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={'chip' + (form.categoryId === c.id ? ' chip--active' : '')}
+              style={
+                form.categoryId === c.id ? { background: c.color, borderColor: c.color } : undefined
+              }
+              onClick={() => patch('categoryId', c.id)}
+            >
+              <span className="chip__dot" style={{ background: c.color }} />
+              {c.name}
+            </button>
+          ))}
         </div>
-        <div>
-          <label className="field__label" htmlFor="ev-repeat">
-            Повтор
-          </label>
-          <select
-            id="ev-repeat"
-            className="select"
-            value={form.rrule}
-            onChange={(e) => patch('rrule', e.target.value)}
-          >
-            {REPEATS.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-        </div>
+      </div>
+
+      <div className="field">
+        <label className="field__label" htmlFor="ev-repeat">
+          Повтор
+        </label>
+        <select
+          id="ev-repeat"
+          className="select"
+          value={form.rrule}
+          onChange={(e) => patch('rrule', e.target.value)}
+        >
+          {REPEATS.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="field">

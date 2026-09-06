@@ -1,5 +1,5 @@
 import type { CalendarEvent, ColorPref } from '../../api/types';
-import { eventColor, CATEGORY_LABELS } from '../../lib/colors';
+import { eventColor } from '../../lib/colors';
 import { formatTime } from '../../lib/dates';
 import { Avatar } from '../../ui/Avatar';
 
@@ -24,8 +24,12 @@ export function EventCard({ event, colorPref, onOpen }: Props) {
           <span>
             {event.allDay ? 'Весь день' : `${formatTime(event.startsAt)} – ${formatTime(event.endsAt)}`}
           </span>
-          <span>·</span>
-          <span>{CATEGORY_LABELS[event.category]}</span>
+          {event.category && (
+            <>
+              <span>·</span>
+              <span>{event.category.name}</span>
+            </>
+          )}
           {event.isRecurring && <span title="Повторяющееся событие">🔁</span>}
           {event.reminderMinutes !== null && <span title="Напоминание включено">⏰</span>}
           <span>·</span>

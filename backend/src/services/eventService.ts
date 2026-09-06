@@ -5,11 +5,13 @@ import { assertMember } from '../auth/middleware.js';
 import { emitToFamily } from '../realtime/hub.js';
 import { expandOccurrences } from './recurrence.js';
 import { notifyEventCreated } from './notificationService.js';
+import { toCategoryDto } from './categoryService.js';
 import type { CreateEventInput, UpdateEventInput } from './schemas.js';
 
 const eventInclude = {
   author: true,
   updatedBy: true,
+  categoryRef: true,
   participants: { include: { user: true } },
   exceptions: true,
 } satisfies Prisma.EventInclude;
@@ -47,7 +49,7 @@ export function toEventDto(event: EventWithRelations, occurrence?: OccurrenceOve
     occurrenceStart: (occurrence?.startsAt ?? event.startsAt).toISOString(),
     seriesStart: event.startsAt.toISOString(),
     allDay: event.allDay,
-    category: event.category,
+    category: event.categoryRef ? toCategoryDto(event.categoryRef) : null,
     color: event.color,
     rrule: event.rrule,
     reminderMinutes: event.reminderMinutes,
@@ -68,6 +70,15 @@ async function loadEvent(eventId: string): Promise<EventWithRelations> {
   });
   if (!event) throw new HttpError(404, 'Event not found');
   return event;
+}
+
+/** A category may only be attached to an event of the family that owns it. */
+async function assertCategoryInFamily(familyId: string, categoryId: string | null | undefined) {
+  if (!categoryId) return;
+  const category = await prisma.category.findUnique({ where: { id: categoryId } });
+  if (!category || category.familyId !== familyId) {
+    throw new HttpError(400, 'Категория принадлежит другой семье');
+  }
 }
 
 /** Participants must themselves be members of the family owning the event. */
@@ -130,6 +141,7 @@ export async function listEvents(userId: string, familyId: string, from: Date, t
 
 export async function createEvent(userId: string, input: CreateEventInput): Promise<EventDto> {
   await assertMember(userId, input.familyId);
+  await assertCategoryInFamily(input.familyId, input.categoryId);
   await assertParticipantsInFamily(input.familyId, input.participantIds);
 
   const created = await prisma.event.create({
@@ -140,7 +152,7 @@ export async function createEvent(userId: string, input: CreateEventInput): Prom
       startsAt: input.startsAt,
       endsAt: input.endsAt,
       allDay: input.allDay,
-      category: input.category,
+      categoryId: input.categoryId ?? null,
       color: input.color ?? null,
       rrule: input.rrule ?? null,
       reminderMinutes: input.reminderMinutes ?? null,
@@ -169,6 +181,7 @@ export async function updateEvent(
 ): Promise<EventDto> {
   const event = await loadEvent(eventId);
   await assertMember(userId, event.familyId);
+  await assertCategoryInFamily(event.familyId, input.categoryId);
   if (input.participantIds) await assertParticipantsInFamily(event.familyId, input.participantIds);
 
   if (scope === 'this' && event.rrule) {
@@ -198,7 +211,7 @@ export async function updateEvent(
         ...(input.startsAt !== undefined ? { startsAt: input.startsAt } : {}),
         ...(input.endsAt !== undefined ? { endsAt: input.endsAt } : {}),
         ...(input.allDay !== undefined ? { allDay: input.allDay } : {}),
-        ...(input.category !== undefined ? { category: input.category } : {}),
+        ...(input.categoryId !== undefined ? { categoryId: input.categoryId ?? null } : {}),
         ...(input.color !== undefined ? { color: input.color ?? null } : {}),
         ...(input.rrule !== undefined ? { rrule: input.rrule ?? null } : {}),
         ...(input.reminderMinutes !== undefined ? { reminderMinutes: input.reminderMinutes ?? null } : {}),

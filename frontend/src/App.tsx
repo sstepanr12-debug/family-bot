@@ -1,15 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from './api/client';
 import { subscribeToFamily } from './api/socket';
-import type { CalendarEvent, ColorPref, EventDraft, Family, Me, Member } from './api/types';
+import type {
+  CalendarEvent,
+  Category,
+  ColorPref,
+  EventDraft,
+  Family,
+  Me,
+  Member,
+  Task,
+  TaskDraft,
+} from './api/types';
 import { CalendarView, type ViewMode } from './features/calendar/CalendarView';
 import { EventSheet } from './features/event/EventSheet';
 import { FamilySheet } from './features/family/FamilySheet';
 import { Onboarding } from './features/family/Onboarding';
+import { CategorySheet } from './features/settings/CategorySheet';
+import { TaskList } from './features/tasks/TaskList';
+import { TaskSheet } from './features/tasks/TaskSheet';
 import { addDays, formatMonth, formatWeekRange, startOfWeek } from './lib/dates';
 import { haptic, isInsideTelegram, webApp } from './telegram/webapp';
 
 const FAMILY_KEY = 'fc.familyId';
+
+type Tab = 'calendar' | 'tasks' | 'family';
 
 /** Outside Telegram a ?dev=N seat lets two browser tabs act as two members. */
 function devSeat(): number | undefined {
@@ -22,15 +37,22 @@ export function App() {
   const [families, setFamilies] = useState<Family[]>([]);
   const [family, setFamily] = useState<Family | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
+  const [tab, setTab] = useState<Tab>('calendar');
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [selectedDay, setSelectedDay] = useState(() => new Date());
   const [mode, setMode] = useState<ViewMode>('day');
 
-  const [editing, setEditing] = useState<CalendarEvent | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [eventSheet, setEventSheet] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [taskSheet, setTaskSheet] = useState(false);
   const [familySheet, setFamilySheet] = useState(false);
+  const [categorySheet, setCategorySheet] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
@@ -65,12 +87,22 @@ export function App() {
 
   const reload = useCallback(async () => {
     if (!family) return;
-    const [list, people] = await Promise.all([
+    // The calendar needs tasks due in the visible week plus every overdue one;
+    // the to-do tab needs the full list. One extra request keeps both honest.
+    const [list, people, cats, rangeTasks, allTasks] = await Promise.all([
       api.fetchEvents(family.id, weekStart, weekEnd),
       api.fetchMembers(family.id),
+      api.fetchCategories(family.id),
+      api.fetchTasksForRange(family.id, weekStart, weekEnd),
+      api.fetchTasks(family.id),
     ]);
     setEvents(list);
     setMembers(people);
+    setCategories(cats);
+    // Merge both task sets by id: the calendar and the list share one store.
+    const byId = new Map<string, Task>();
+    for (const task of [...allTasks, ...rangeTasks]) byId.set(task.id, task);
+    setTasks([...byId.values()]);
   }, [family, weekStart, weekEnd]);
 
   useEffect(() => {
@@ -81,9 +113,9 @@ export function App() {
 
   useEffect(() => {
     if (!family) return;
-    // A change to a recurring series can add or drop occurrences anywhere in the
-    // window, so refetch instead of patching in place; one-off events patch.
     return subscribeToFamily(family.id, {
+      // A change to a recurring series can add or drop occurrences anywhere in
+      // the window, so refetch instead of patching in place.
       onCreated: (event) => {
         if (event.isRecurring) void reload();
         else setEvents((prev) => mergeEvent(prev, event, weekStart, weekEnd));
@@ -95,37 +127,38 @@ export function App() {
             (e) => e.id !== eventId || (occurrenceStart && e.occurrenceStart !== occurrenceStart),
           ),
         ),
+      onTaskChanged: (task) =>
+        setTasks((prev) => {
+          const without = prev.filter((t) => t.id !== task.id);
+          return [...without, task];
+        }),
+      onTaskDeleted: (taskId) => setTasks((prev) => prev.filter((t) => t.id !== taskId)),
+      onCategoriesChanged: () => void reload(),
     });
   }, [family, reload, weekStart, weekEnd]);
 
-  // --- actions ---------------------------------------------------------
+  // --- events ----------------------------------------------------------
 
-  const openNew = (day: Date) => {
+  const openNewEvent = (day: Date) => {
     haptic();
     setSelectedDay(day);
-    setEditing(null);
+    setEditingEvent(null);
     setSheetError(null);
-    setSheetOpen(true);
+    setEventSheet(true);
   };
 
-  const openExisting = (event: CalendarEvent) => {
-    setEditing(event);
-    setSheetError(null);
-    setSheetOpen(true);
-  };
-
-  const save = async (draft: EventDraft, scope: 'this' | 'all') => {
+  const saveEvent = async (draft: EventDraft, scope: 'this' | 'all') => {
     if (!family) return;
     setSaving(true);
     setSheetError(null);
     try {
-      if (editing) {
-        await api.updateEvent(editing.id, draft, scope, editing.occurrenceStart);
+      if (editingEvent) {
+        await api.updateEvent(editingEvent.id, draft, scope, editingEvent.occurrenceStart);
       } else {
         await api.createEvent(family.id, draft);
       }
       await reload();
-      setSheetOpen(false);
+      setEventSheet(false);
       haptic('medium');
     } catch (err) {
       setSheetError(err instanceof Error ? err.message : 'Не удалось сохранить');
@@ -134,19 +167,80 @@ export function App() {
     }
   };
 
-  const remove = async (scope: 'this' | 'all') => {
-    if (!editing) return;
+  const removeEvent = async (scope: 'this' | 'all') => {
+    if (!editingEvent) return;
     setSaving(true);
     try {
-      await api.deleteEvent(editing.id, scope, editing.occurrenceStart);
+      await api.deleteEvent(editingEvent.id, scope, editingEvent.occurrenceStart);
       await reload();
-      setSheetOpen(false);
+      setEventSheet(false);
     } catch (err) {
       setSheetError(err instanceof Error ? err.message : 'Не удалось удалить');
     } finally {
       setSaving(false);
     }
   };
+
+  // --- tasks -----------------------------------------------------------
+
+  const openNewTask = () => {
+    haptic();
+    setEditingTask(null);
+    setSheetError(null);
+    setTaskSheet(true);
+  };
+
+  const openTask = (task: Task) => {
+    setEditingTask(task);
+    setSheetError(null);
+    setTaskSheet(true);
+  };
+
+  /** Optimistic tick: the checkbox must feel instant, and roll back on failure. */
+  const toggleTask = async (task: Task) => {
+    haptic();
+    const next = { ...task, done: !task.done, overdue: task.done ? task.overdue : false };
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? next : t)));
+    try {
+      const saved = await api.updateTask(task.id, { done: next.done });
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? saved : t)));
+    } catch {
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+    }
+  };
+
+  const saveTask = async (draft: TaskDraft) => {
+    if (!family) return;
+    setSaving(true);
+    setSheetError(null);
+    try {
+      if (editingTask) await api.updateTask(editingTask.id, draft);
+      else await api.createTask(family.id, draft);
+      await reload();
+      setTaskSheet(false);
+      haptic('medium');
+    } catch (err) {
+      setSheetError(err instanceof Error ? err.message : 'Не удалось сохранить');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeTask = async () => {
+    if (!editingTask) return;
+    setSaving(true);
+    try {
+      await api.deleteTask(editingTask.id);
+      await reload();
+      setTaskSheet(false);
+    } catch (err) {
+      setSheetError(err instanceof Error ? err.message : 'Не удалось удалить');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // --- navigation ------------------------------------------------------
 
   const goToday = () => {
     const now = new Date();
@@ -187,71 +281,189 @@ export function App() {
     );
   }
 
+  const colorPref = (me?.colorPref ?? 'category') as ColorPref;
+  const openTaskCount = tasks.filter((t) => !t.done).length;
+
   return (
     <div className="app">
-      <header className="header">
-        <div className="header__row">
-          <button type="button" className="icon-btn" onClick={() => shiftWeek(-1)} aria-label="Предыдущая неделя">
-            ‹
-          </button>
-          <div className="header__title">
-            {formatMonth(selectedDay)}
-            <div className="header__sub">{formatWeekRange(weekStart)}</div>
+      {tab === 'calendar' && (
+        <>
+          <header className="header">
+            <div className="header__row">
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => shiftWeek(-1)}
+                aria-label="Предыдущая неделя"
+              >
+                ‹
+              </button>
+              <div className="header__title">
+                <span className="header__month">{formatMonth(selectedDay)}</span>
+                <div className="header__sub">{formatWeekRange(weekStart)}</div>
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => shiftWeek(1)}
+                aria-label="Следующая неделя"
+              >
+                ›
+              </button>
+              <button type="button" className="icon-btn" onClick={goToday} aria-label="Сегодня">
+                ⌖
+              </button>
+            </div>
+
+            <div className="chip-row">
+              <button
+                type="button"
+                className={'chip' + (mode === 'day' ? ' chip--active' : '')}
+                onClick={() => setMode('day')}
+              >
+                День
+              </button>
+              <button
+                type="button"
+                className={'chip' + (mode === 'week' ? ' chip--active' : '')}
+                onClick={() => setMode('week')}
+              >
+                Неделя
+              </button>
+            </div>
+          </header>
+
+          <CalendarView
+            mode={mode}
+            weekStart={weekStart}
+            selectedDay={selectedDay}
+            events={events}
+            tasks={tasks}
+            colorPref={colorPref}
+            onSelectDay={setSelectedDay}
+            onOpenEvent={(event) => {
+              setEditingEvent(event);
+              setSheetError(null);
+              setEventSheet(true);
+            }}
+            onOpenTask={openTask}
+            onToggleTask={toggleTask}
+            onAddForDay={openNewEvent}
+          />
+        </>
+      )}
+
+      {tab === 'tasks' && (
+        <>
+          <header className="header">
+            <div className="header__row">
+              <div className="header__title">
+                Дела
+                <div className="header__sub">
+                  {openTaskCount === 0 ? 'всё сделано' : `${openTaskCount} в работе`}
+                </div>
+              </div>
+            </div>
+          </header>
+          <TaskList tasks={tasks} onToggle={toggleTask} onOpen={openTask} onAdd={openNewTask} />
+        </>
+      )}
+
+      {tab === 'family' && (
+        <>
+          <header className="header">
+            <div className="header__row">
+              <div className="header__title">
+                {family.name}
+                <div className="header__sub">{members.length} участников</div>
+              </div>
+            </div>
+          </header>
+          <div className="content">
+            <button type="button" className="btn btn--ghost" onClick={() => setCategorySheet(true)}>
+              Категории и цвета
+            </button>
+            <button type="button" className="btn btn--ghost" onClick={() => setFamilySheet(true)}>
+              Участники и приглашение
+            </button>
           </div>
-          <button type="button" className="icon-btn" onClick={() => shiftWeek(1)} aria-label="Следующая неделя">
-            ›
-          </button>
-          <button type="button" className="icon-btn" onClick={goToday} aria-label="Сегодня">
-            ⌖
-          </button>
-          <button type="button" className="icon-btn" onClick={() => setFamilySheet(true)} aria-label="Семья">
-            👪
-          </button>
-        </div>
+        </>
+      )}
 
-        <div className="chip-row">
-          <button
-            type="button"
-            className={'chip' + (mode === 'day' ? ' chip--active' : '')}
-            onClick={() => setMode('day')}
-          >
-            День
-          </button>
-          <button
-            type="button"
-            className={'chip' + (mode === 'week' ? ' chip--active' : '')}
-            onClick={() => setMode('week')}
-          >
-            Неделя
-          </button>
-        </div>
-      </header>
+      {tab !== 'family' && (
+        <button
+          type="button"
+          className="fab"
+          onClick={() => (tab === 'calendar' ? openNewEvent(selectedDay) : openNewTask())}
+          aria-label={tab === 'calendar' ? 'Добавить событие' : 'Добавить дело'}
+        >
+          +
+        </button>
+      )}
 
-      <CalendarView
-        mode={mode}
-        weekStart={weekStart}
-        selectedDay={selectedDay}
-        events={events}
-        colorPref={(me?.colorPref ?? 'category') as ColorPref}
-        onSelectDay={setSelectedDay}
-        onOpenEvent={openExisting}
-        onAddForDay={openNew}
-      />
+      <nav className="tabbar">
+        <button
+          type="button"
+          className={'tabbar__item' + (tab === 'calendar' ? ' tabbar__item--active' : '')}
+          onClick={() => setTab('calendar')}
+        >
+          <span className="tabbar__icon">📅</span>
+          Календарь
+        </button>
+        <button
+          type="button"
+          className={'tabbar__item' + (tab === 'tasks' ? ' tabbar__item--active' : '')}
+          onClick={() => setTab('tasks')}
+        >
+          <span className="tabbar__icon">
+            ✓{openTaskCount > 0 && <span className="tabbar__badge">{openTaskCount}</span>}
+          </span>
+          Дела
+        </button>
+        <button
+          type="button"
+          className={'tabbar__item' + (tab === 'family' ? ' tabbar__item--active' : '')}
+          onClick={() => setTab('family')}
+        >
+          <span className="tabbar__icon">👪</span>
+          Семья
+        </button>
+      </nav>
 
-      <button type="button" className="fab" onClick={() => openNew(selectedDay)} aria-label="Добавить событие">
-        +
-      </button>
-
-      {sheetOpen && (
+      {eventSheet && (
         <EventSheet
-          event={editing}
+          event={editingEvent}
           defaultDay={selectedDay}
+          categories={categories}
           members={members}
           saving={saving}
           error={sheetError}
-          onSave={save}
-          onDelete={remove}
-          onClose={() => setSheetOpen(false)}
+          onSave={saveEvent}
+          onDelete={removeEvent}
+          onClose={() => setEventSheet(false)}
+        />
+      )}
+
+      {taskSheet && (
+        <TaskSheet
+          task={editingTask}
+          defaultDay={selectedDay}
+          categories={categories}
+          members={members}
+          saving={saving}
+          error={sheetError}
+          onSave={saveTask}
+          onDelete={removeTask}
+          onClose={() => setTaskSheet(false)}
+        />
+      )}
+
+      {categorySheet && (
+        <CategorySheet
+          familyId={family.id}
+          categories={categories}
+          onChanged={setCategories}
+          onClose={() => setCategorySheet(false)}
         />
       )}
 
@@ -260,7 +472,7 @@ export function App() {
           family={family}
           families={families}
           members={members}
-          colorPref={(me?.colorPref ?? 'category') as ColorPref}
+          colorPref={colorPref}
           onColorPref={(pref) => setMe((prev) => (prev ? { ...prev, colorPref: pref } : prev))}
           onSelectFamily={(next) => {
             setFamily(next);

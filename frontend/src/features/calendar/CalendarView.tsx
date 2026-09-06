@@ -1,6 +1,6 @@
-import type { CalendarEvent, ColorPref } from '../../api/types';
-import { eventColor } from '../../lib/colors';
-import { formatDay, isSameDay, isToday, WEEKDAYS, weekDays } from '../../lib/dates';
+import type { CalendarEvent, ColorPref, Task } from '../../api/types';
+import { eventColor, taskColor } from '../../lib/colors';
+import { formatDay, isSameDay, isToday, startOfDay, WEEKDAYS, weekDays } from '../../lib/dates';
 import { EventCard } from './EventCard';
 
 export type ViewMode = 'week' | 'day';
@@ -10,27 +10,47 @@ interface Props {
   weekStart: Date;
   selectedDay: Date;
   events: CalendarEvent[];
+  tasks: Task[];
   colorPref: ColorPref;
   onSelectDay(day: Date): void;
   onOpenEvent(event: CalendarEvent): void;
+  onOpenTask(task: Task): void;
+  onToggleTask(task: Task): void;
   onAddForDay(day: Date): void;
 }
 
 const eventsOfDay = (events: CalendarEvent[], day: Date) =>
   events.filter((e) => isSameDay(new Date(e.startsAt), day));
 
-/** Weekday selector; the dots preview how busy each day is. */
+/**
+ * Tasks to show under a day: those due that day, plus — on today only — every
+ * overdue one, so a missed deadline stays in sight instead of sinking into the
+ * past where nobody scrolls.
+ */
+function tasksOfDay(tasks: Task[], day: Date): Task[] {
+  const showOverdueHere = isToday(day);
+  return tasks.filter((task) => {
+    if (task.done || !task.dueDate) return false;
+    if (task.overdue) return showOverdueHere;
+    return isSameDay(startOfDay(new Date(task.dueDate)), startOfDay(day));
+  });
+}
+
 function WeekStrip({
   weekStart,
   selectedDay,
   events,
+  tasks,
   colorPref,
   onSelectDay,
-}: Pick<Props, 'weekStart' | 'selectedDay' | 'events' | 'colorPref' | 'onSelectDay'>) {
+}: Pick<Props, 'weekStart' | 'selectedDay' | 'events' | 'tasks' | 'colorPref' | 'onSelectDay'>) {
   return (
     <div className="weekstrip">
       {weekDays(weekStart).map((day, i) => {
-        const dayEvents = eventsOfDay(events, day);
+        const marks = [
+          ...eventsOfDay(events, day).map((e) => eventColor(e, colorPref)),
+          ...tasksOfDay(tasks, day).map(taskColor),
+        ];
         const selected = isSameDay(day, selectedDay);
         return (
           <button
@@ -47,13 +67,11 @@ function WeekStrip({
             <span className="weekstrip__name">{WEEKDAYS[i]}</span>
             <span className="weekstrip__num">{day.getDate()}</span>
             <span className="weekstrip__dots">
-              {dayEvents.slice(0, 3).map((e) => (
+              {marks.slice(0, 3).map((color, index) => (
                 <span
-                  key={e.id + e.occurrenceStart}
+                  key={index}
                   className="weekstrip__dot"
-                  style={{
-                    background: selected ? 'currentColor' : eventColor(e, colorPref),
-                  }}
+                  style={{ background: selected ? 'currentColor' : color }}
                 />
               ))}
             </span>
@@ -64,25 +82,60 @@ function WeekStrip({
   );
 }
 
+function DayTask({
+  task,
+  onOpenTask,
+  onToggleTask,
+}: {
+  task: Task;
+  onOpenTask(task: Task): void;
+  onToggleTask(task: Task): void;
+}) {
+  return (
+    <div className={'daytask' + (task.overdue ? ' daytask--overdue' : '')}>
+      <button
+        type="button"
+        className="task__check"
+        onClick={() => onToggleTask(task)}
+        aria-label="Выполнено"
+      />
+      <button type="button" className="daytask__body" onClick={() => onOpenTask(task)}>
+        <span className="task__dot" style={{ background: taskColor(task) }} />
+        <span className="daytask__title">{task.title}</span>
+        {task.overdue && <span className="daytask__badge">просрочено</span>}
+      </button>
+    </div>
+  );
+}
+
 function DayGroup({
   day,
   events,
+  tasks,
   colorPref,
   onOpenEvent,
+  onOpenTask,
+  onToggleTask,
   onAddForDay,
 }: {
   day: Date;
   events: CalendarEvent[];
+  tasks: Task[];
   colorPref: ColorPref;
   onOpenEvent(event: CalendarEvent): void;
+  onOpenTask(task: Task): void;
+  onToggleTask(task: Task): void;
   onAddForDay(day: Date): void;
 }) {
+  const empty = events.length === 0 && tasks.length === 0;
+
   return (
     <section>
       <h3 className={'daygroup__title' + (isToday(day) ? ' daygroup__title--today' : '')}>
         {WEEKDAYS[(day.getDay() + 6) % 7]}, {formatDay(day)}
       </h3>
-      {events.length === 0 ? (
+
+      {empty ? (
         <div className="empty">
           <span className="empty__emoji">🌤️</span>
           Свободный день
@@ -92,6 +145,9 @@ function DayGroup({
         </div>
       ) : (
         <div className="daygroup__list">
+          {tasks.map((task) => (
+            <DayTask key={task.id} task={task} onOpenTask={onOpenTask} onToggleTask={onToggleTask} />
+          ))}
           {events.map((event) => (
             <EventCard
               key={event.id + event.occurrenceStart}
@@ -107,7 +163,7 @@ function DayGroup({
 }
 
 export function CalendarView(props: Props) {
-  const { mode, weekStart, selectedDay, events, colorPref, onOpenEvent, onAddForDay } = props;
+  const { mode, weekStart, selectedDay, events, tasks, colorPref } = props;
   const days = mode === 'week' ? weekDays(weekStart) : [selectedDay];
 
   return (
@@ -119,9 +175,12 @@ export function CalendarView(props: Props) {
             key={day.toISOString()}
             day={day}
             events={eventsOfDay(events, day)}
+            tasks={tasksOfDay(tasks, day)}
             colorPref={colorPref}
-            onOpenEvent={onOpenEvent}
-            onAddForDay={onAddForDay}
+            onOpenEvent={props.onOpenEvent}
+            onOpenTask={props.onOpenTask}
+            onToggleTask={props.onToggleTask}
+            onAddForDay={props.onAddForDay}
           />
         ))}
       </div>

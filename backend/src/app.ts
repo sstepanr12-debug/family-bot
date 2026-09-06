@@ -10,6 +10,8 @@ import { authRouter } from './routes/auth.js';
 import { familiesRouter } from './routes/families.js';
 import { eventsRouter } from './routes/events.js';
 import { meRouter } from './routes/me.js';
+import { categoriesRouter } from './routes/categories.js';
+import { tasksRouter } from './routes/tasks.js';
 import { botRouter } from './bot/webhook.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -37,6 +39,8 @@ export function createApp() {
   app.use('/api/me', meRouter);
   app.use('/api/families', familiesRouter);
   app.use('/api/events', eventsRouter);
+  app.use('/api/categories', categoriesRouter);
+  app.use('/api/tasks', tasksRouter);
   app.use('/api/bot', botRouter);
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));

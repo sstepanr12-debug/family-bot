@@ -7,7 +7,12 @@ import { prisma } from '../db/client.js';
 export type FamilyEvent =
   | { type: 'event:created'; event: unknown }
   | { type: 'event:updated'; event: unknown }
-  | { type: 'event:deleted'; eventId: string; occurrenceStart?: string };
+  | { type: 'event:deleted'; eventId: string; occurrenceStart?: string }
+  | { type: 'task:created'; task: unknown }
+  | { type: 'task:updated'; task: unknown }
+  | { type: 'task:deleted'; taskId: string }
+  // Categories are few and rarely change; clients just refetch the list.
+  | { type: 'category:changed' };
 
 let io: IOServer | null = null;
 

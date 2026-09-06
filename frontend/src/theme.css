@@ -110,6 +110,11 @@ button {
   min-width: 0;
   font-size: 17px;
   font-weight: 600;
+}
+
+/* Standalone month title: "сентябрь 2026" → "Сентябрь 2026". The year has no
+   letters, so capitalize touches only the month name. */
+.header__month {
   text-transform: capitalize;
 }
 
@@ -219,7 +224,7 @@ button {
 
 .content {
   flex: 1;
-  padding: 12px 14px calc(96px + var(--safe-bottom));
+  padding: 12px 14px calc(150px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -230,7 +235,6 @@ button {
   font-weight: 600;
   color: var(--tg-hint);
   margin: 0 0 8px;
-  text-transform: capitalize;
 }
 
 .daygroup__title--today {
@@ -338,7 +342,7 @@ button {
 .fab {
   position: fixed;
   right: 18px;
-  bottom: calc(20px + var(--safe-bottom));
+  bottom: calc(78px + var(--safe-bottom));
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -549,4 +553,233 @@ button {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ---------- bottom tab bar ---------- */
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 12;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--tg-header-bg);
+  border-top: 1px solid var(--border);
+  padding-bottom: var(--safe-bottom);
+}
+
+.tabbar__item {
+  border: none;
+  background: none;
+  color: var(--tg-hint);
+  font-size: 11px;
+  padding: 8px 0 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.tabbar__item--active {
+  color: var(--tg-link);
+}
+
+.tabbar__icon {
+  font-size: 19px;
+  line-height: 1;
+  position: relative;
+}
+
+.tabbar__badge {
+  position: absolute;
+  top: -6px;
+  left: 11px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* ---------- tasks ---------- */
+
+.task {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--tg-section-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.task--done .task__title {
+  text-decoration: line-through;
+  color: var(--tg-hint);
+}
+
+.task__check {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border: 2px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tg-button-text);
+  font-size: 13px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+
+.task__check--on {
+  background: var(--tg-button);
+  border-color: var(--tg-button);
+}
+
+.task__body {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+}
+
+.task__title {
+  display: block;
+  font-weight: 600;
+}
+
+.task__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: var(--tg-hint);
+  font-size: 13px;
+}
+
+.task__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 8px;
+}
+
+.task__due--overdue {
+  color: #e5484d;
+  font-weight: 600;
+}
+
+.daygroup__title--overdue {
+  color: #e5484d;
+}
+
+.daygroup__toggle {
+  border: none;
+  background: none;
+  color: var(--tg-hint);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 0 8px;
+}
+
+/* Task shown inside a calendar day, above that day's events. */
+.daytask {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--tg-section-bg);
+  border-left: 3px dashed var(--border);
+}
+
+.daytask--overdue {
+  border-left-color: #e5484d;
+}
+
+.daytask__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+}
+
+.daytask__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.daytask__badge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #e5484d;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
+/* ---------- category palette ---------- */
+
+.chip__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Static colour indicator in the category list (not a control). */
+.swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.palette__dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.palette__dot--on {
+  border-color: var(--tg-text);
+}
+
+.linklike {
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }

@@ -3,6 +3,7 @@ import { prisma } from '../db/client.js';
 import { HttpError } from '../lib/httpError.js';
 import { assertMember } from '../auth/middleware.js';
 import type { TelegramUser } from '../auth/initData.js';
+import { ensureDefaultCategories } from './categoryService.js';
 
 // Unambiguous alphabet: no 0/O/1/I, since codes get read aloud and retyped.
 const newInviteCode = customAlphabet('23456789ABCDEFGHJKLMNPQRSTUVWXYZ', 8);
@@ -31,7 +32,7 @@ export async function listFamiliesForUser(userId: string) {
 }
 
 export async function createFamily(userId: string, name: string, timezone?: string) {
-  return prisma.family.create({
+  const family = await prisma.family.create({
     data: {
       name,
       inviteCode: newInviteCode(),
@@ -39,6 +40,10 @@ export async function createFamily(userId: string, name: string, timezone?: stri
       members: { create: { userId, role: 'owner' } },
     },
   });
+  // A family is useless without labels to colour-code by, so seed them now
+  // rather than waiting for the first read.
+  await ensureDefaultCategories(family.id);
+  return family;
 }
 
 export async function joinFamily(userId: string, inviteCode: string) {

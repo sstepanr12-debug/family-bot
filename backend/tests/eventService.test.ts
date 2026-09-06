@@ -8,6 +8,7 @@ import {
   updateEvent,
 } from '../src/services/eventService.js';
 import { createEventSchema } from '../src/services/schemas.js';
+import { listCategories } from '../src/services/categoryService.js';
 
 // The bot is a no-op without a token, but stub the network layer anyway so a
 // test run never depends on it.
@@ -94,6 +95,22 @@ describe('createEvent', () => {
     await expect(
       createEvent(ctx.anya.id, eventBody(ctx.family.id, { participantIds: [ctx.outsider.id] })),
     ).rejects.toThrow(/not members/);
+  });
+
+  it('returns the category as a name and colour the client can render', async () => {
+    const categories = await listCategories(ctx.anya.id, ctx.family.id);
+    const dto = await createEvent(
+      ctx.anya.id,
+      eventBody(ctx.family.id, { categoryId: categories[0].id }),
+    );
+    expect(dto.category).toMatchObject({ name: categories[0].name, color: categories[0].color });
+  });
+
+  it('refuses a category belonging to another family', async () => {
+    const foreign = await listCategories(ctx.outsider.id, ctx.other.id);
+    await expect(
+      createEvent(ctx.anya.id, eventBody(ctx.family.id, { categoryId: foreign[0].id })),
+    ).rejects.toThrow(/другой семье/);
   });
 
   it('rejects an end time before the start time', () => {

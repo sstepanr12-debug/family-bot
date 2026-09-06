@@ -1,4 +1,14 @@
-import type { CalendarEvent, ColorPref, EventDraft, Family, Me, Member } from './types';
+import type {
+  CalendarEvent,
+  Category,
+  ColorPref,
+  EventDraft,
+  Family,
+  Me,
+  Member,
+  Task,
+  TaskDraft,
+} from './types';
 
 /** Empty = same origin: the backend serves this bundle and the API together. */
 const BASE = import.meta.env.VITE_API_URL ?? '';
@@ -103,3 +113,49 @@ export const deleteEvent = (eventId: string, scope: 'this' | 'all', occurrenceSt
       (occurrenceStart ? `&occurrenceStart=${encodeURIComponent(occurrenceStart)}` : ''),
     { method: 'DELETE' },
   );
+
+// --- categories ---------------------------------------------------------
+
+export const fetchCategories = (familyId: string) =>
+  request<Category[]>(`/api/categories?familyId=${familyId}`);
+
+export const createCategory = (familyId: string, name: string, color: string) =>
+  request<Category>(`/api/categories?familyId=${familyId}`, {
+    method: 'POST',
+    body: JSON.stringify({ name, color }),
+  });
+
+export const updateCategory = (
+  categoryId: string,
+  patch: { name?: string; color?: string; archived?: boolean },
+) =>
+  request<Category>(`/api/categories/${categoryId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+
+export const reorderCategories = (familyId: string, orderedIds: string[]) =>
+  request<Category[]>(`/api/categories/reorder?familyId=${familyId}`, {
+    method: 'POST',
+    body: JSON.stringify({ orderedIds }),
+  });
+
+// --- tasks --------------------------------------------------------------
+
+export const fetchTasks = (familyId: string) =>
+  request<Task[]>(`/api/tasks?familyId=${familyId}`);
+
+/** Tasks the calendar needs: due in the range, plus every overdue open one. */
+export const fetchTasksForRange = (familyId: string, from: Date, to: Date) =>
+  request<Task[]>(
+    `/api/tasks?familyId=${familyId}&from=${from.toISOString()}&to=${to.toISOString()}`,
+  );
+
+export const createTask = (familyId: string, draft: TaskDraft) =>
+  request<Task>('/api/tasks', { method: 'POST', body: JSON.stringify({ familyId, ...draft }) });
+
+export const updateTask = (taskId: string, patch: Partial<TaskDraft> & { done?: boolean }) =>
+  request<Task>(`/api/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(patch) });
+
+export const deleteTask = (taskId: string) =>
+  request<void>(`/api/tasks/${taskId}`, { method: 'DELETE' });
