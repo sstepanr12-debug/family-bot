@@ -98,7 +98,6 @@ npx cloudflared tunnel --url http://localhost:3000
 2. На [render.com](https://render.com) → **New → Web Service** → ваш репозиторий.
    Если Render найдёт `render.yaml`, все настройки подхватятся сами; иначе
    задайте вручную:
-   - Root Directory: `family-calendar`
    - Build Command: `npm ci && npm run db:postgres && npm run build`
    - Start Command: `npm start`
    - Plan: Free
