@@ -5,7 +5,7 @@ services:
     name: family-calendar
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run db:postgres && npm run build
+    buildCommand: npm ci --include=dev && npm run db:postgres && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
