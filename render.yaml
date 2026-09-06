@@ -1,0 +1,30 @@
+# Render Blueprint: one web service that serves both the API and the built app.
+# The database lives outside Render (Neon free tier) — set DATABASE_URL by hand.
+services:
+  - type: web
+    name: family-calendar
+    runtime: node
+    plan: free
+    rootDir: family-calendar
+    buildCommand: npm ci && npm run db:postgres && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DEV_FAKE_USER
+        value: "0"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      # Set these two in the Render dashboard:
+      #   DATABASE_URL — Neon connection string (postgresql://…?sslmode=require)
+      #   BOT_TOKEN    — token from @BotFather
+      #   PUBLIC_URL   — https://<service-name>.onrender.com (known after first deploy)
+      - key: DATABASE_URL
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: PUBLIC_URL
+        sync: false

@@ -1,0 +1,121 @@
+// Switch `provider` to "postgresql" (and DATABASE_URL to a postgres:// URL)
+// to run the same schema on PostgreSQL — no model changes needed.
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id         String   @id @default(cuid())
+  telegramId String   @unique
+  firstName  String
+  lastName   String?
+  username   String?
+  photoUrl   String?
+  /// "author" | "category" — how events are coloured for this user
+  colorPref  String   @default("category")
+  createdAt  DateTime @default(now())
+
+  memberships    Membership[]
+  authoredEvents Event[]            @relation("EventAuthor")
+  editedEvents   Event[]            @relation("EventEditor")
+  participations EventParticipant[]
+}
+
+model Family {
+  id         String   @id @default(cuid())
+  name       String
+  inviteCode String   @unique
+  timezone   String   @default("Europe/Moscow")
+  createdAt  DateTime @default(now())
+
+  members Membership[]
+  events  Event[]
+}
+
+model Membership {
+  userId   String
+  familyId String
+  /// "owner" | "member"
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@id([userId, familyId])
+  @@index([familyId])
+}
+
+model Event {
+  id          String    @id @default(cuid())
+  familyId    String
+  title       String
+  description String?
+  startsAt    DateTime
+  endsAt      DateTime
+  allDay      Boolean   @default(false)
+  /// "work" | "study" | "home" | "holiday" | "other"
+  category    String    @default("other")
+  color       String?
+  authorId    String
+  updatedById String?
+  /// e.g. "FREQ=WEEKLY;INTERVAL=1;UNTIL=2026-01-01T00:00:00.000Z"
+  rrule       String?
+  /// minutes before start to send a reminder; null = no reminder
+  reminderMinutes Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  family       Family             @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  author       User               @relation("EventAuthor", fields: [authorId], references: [id])
+  updatedBy    User?              @relation("EventEditor", fields: [updatedById], references: [id])
+  participants EventParticipant[]
+  exceptions   EventException[]
+  reminders    ReminderLog[]
+
+  @@index([familyId, startsAt])
+}
+
+model EventParticipant {
+  eventId String
+  userId  String
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+}
+
+/// One overridden (moved, retitled or cancelled) occurrence of a recurring event.
+model EventException {
+  id           String    @id @default(cuid())
+  eventId      String
+  originalDate DateTime
+  cancelled    Boolean   @default(false)
+  title        String?
+  description  String?
+  startsAt     DateTime?
+  endsAt       DateTime?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, originalDate])
+}
+
+/// Makes reminder delivery idempotent across scheduler ticks and restarts.
+model ReminderLog {
+  id              String   @id @default(cuid())
+  eventId         String
+  occurrenceStart DateTime
+  sentAt          DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, occurrenceStart])
+}
