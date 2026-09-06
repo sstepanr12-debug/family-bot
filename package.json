@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\"",
-    "build": "npm run build -w frontend && npm run build -w backend",
+    "build": "npm run db:generate -w backend && npm run build -w frontend && npm run build -w backend",
     "test": "npm run test -w backend",
     "db:push": "npm run db:push -w backend",
     "start": "npm run db:push -w backend && npm run start -w backend",
@@ -16,7 +16,6 @@
     "db:sqlite": "npm run db:sqlite -w backend"
   },
   "devDependencies": {
-    "cloudflared": "^0.7.3",
     "concurrently": "^9.1.0"
   },
   "engines": {
