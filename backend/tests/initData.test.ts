@@ -48,6 +48,26 @@ describe('validateInitData', () => {
     expect(() => validateInitData(initData, BOT_TOKEN, { now })).toThrow(/expired/);
   });
 
+  it('accepts a modern payload whose signature is part of the check string', () => {
+    const initData = signInitData({ ...fields(authDate), signature: 'Ed25519Sig' });
+    expect(validateInitData(initData, BOT_TOKEN, { now }).id).toBe(42);
+  });
+
+  it('accepts a payload whose signature was left out of the check string', () => {
+    // Signed without `signature`, then carrying it — what some clients send.
+    const signed = signInitData(fields(authDate));
+    const params = new URLSearchParams(signed);
+    params.set('signature', 'Ed25519Sig');
+    expect(validateInitData(params.toString(), BOT_TOKEN, { now }).id).toBe(42);
+  });
+
+  it('still rejects a bad hash when a signature is present', () => {
+    const params = new URLSearchParams(signInitData(fields(authDate)));
+    params.set('signature', 'Ed25519Sig');
+    params.set('hash', 'aa'.repeat(32));
+    expect(() => validateInitData(params.toString(), BOT_TOKEN, { now })).toThrow(InitDataError);
+  });
+
   it('rejects a payload with no hash at all', () => {
     const initData = new URLSearchParams(fields(authDate)).toString();
     expect(() => validateInitData(initData, BOT_TOKEN, { now })).toThrow(/no hash/);
